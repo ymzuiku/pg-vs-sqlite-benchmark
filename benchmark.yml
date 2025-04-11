@@ -1,0 +1,100 @@
+# origin is the base URL of the server to be tested
+origin: "http://localhost:3333"
+
+# mode determines the benchmarking mode: 'rps' for requests per second, or 'concurrent' for concurrent users
+mode: "concurrent"
+
+# concurrency sets the number of concurrent
+concurrency: 600
+
+# ramp is the ramp concurrency for the benchmark
+ramp: 200
+
+# timelimit is the total duration of the benchmark in seconds
+timelimit: 180
+
+# aiAnalysis indicates whether to analyze the benchmark results using AI
+aiAnalysis:
+  enable: true
+  language: "chinese"
+  techStack: "nodejs,sqlite,postgres的不同场景性能对比，单进程 nodejs express 服务，里面使用 sqlite 和 pg, 其中 sqlite 分为 sqlite3 和 better-sqlite3（promise 模式），无 ORM，直接 SQL；相同的表结构，30 个字段的表，其中 10 个字段添加索引，2个字段添加唯一索引；启动时，压测前初始化随机 30w 条数据；提供这两个 db 的 read、write、rw（读写读操作）、索引读、无索引读操作的接口。其中读的操作都会返回最多 10 条数据"
+  model: "gpt-4o"
+
+# data provides dynamic values to be used in API requests
+data:
+  appDid: "your-app-did"
+  userDid: "your-user-did"
+  loginToken: "your-login-token"
+
+# logResponse determines whether to log the response body of each request
+logResponse: false
+
+# logError determines whether to log any errors encountered during requests
+logError: false
+
+# logParseApis indicates whether to log the parsed APIs
+logParseApis: false
+
+# The sitemap will be parsed and the apis will be added to the benchmark runtime
+# If your provide sitemaps, you can add it here, JSON response like: { "apis": [{"name": "/api/simple-example", "api": "/api/simple-example",},{"name": "/api/full-example", "api": "/api/full-example", "method": "GET", "cookie": "login_token=$$loginToken", "format": "json", "headers": {"Content-Type": "application/json; charset=utf-8"}, "skip": false, "only": false, "body": {}, "assert": {}}], "data": {"key": "value"} }
+sitemap:
+  enable: false
+  url: "https://your-sitemap-url.com/sitemap"
+
+# apiReplace is a map of API endpoints to be replaced with dynamic values
+apiReplace:
+  "^/api-router/": "/api-replace-router/"
+
+# apis defines the list of API endpoints to benchmark
+apis:
+  - name: "/better-sqlite3/read"
+    api: "/better-sqlite3/read"
+
+  - name: "/better-sqlite3/write"
+    api: "/better-sqlite3/write"
+    method: "POST"
+
+  - name: "/better-sqlite3/rw"
+    api: "/better-sqlite3/rw"
+    method: "POST"
+
+  - name: "/better-sqlite3/read/indexed"
+    api: "/better-sqlite3/read/indexed"
+
+  - name: "/better-sqlite3/read/noindex"
+    api: "/better-sqlite3/read/noindex"
+
+  - name: "/sqlite3/read"
+    api: "/sqlite3/read"
+    format: "text"
+
+  - name: "/sqlite3/write"
+    api: "/sqlite3/write"
+    method: "POST"
+
+  - name: "/sqlite3/rw"
+    api: "/sqlite3/rw"
+    method: "POST"
+
+  - name: "/sqlite3/read/indexed"
+    api: "/sqlite3/read/indexed"
+
+  - name: "/sqlite3/read/noindex"
+    api: "/sqlite3/read/noindex"
+
+  - name: "/postgres/read"
+    api: "/postgres/read"
+
+  - name: "/postgres/write"
+    api: "/postgres/write"
+    method: "POST"
+
+  - name: "/postgres/rw"
+    api: "/postgres/rw"
+    method: "POST"
+
+  - name: "/postgres/read/indexed"
+    api: "/postgres/read/indexed"
+
+  - name: "/postgres/read/noindex"
+    api: "/postgres/read/noindex"
