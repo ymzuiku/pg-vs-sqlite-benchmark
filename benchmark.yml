@@ -47,35 +47,8 @@ apiReplace:
 
 # apis defines the list of API endpoints to benchmark
 apis:
-  - name: "/better-sqlite3/read"
-    api: "/better-sqlite3/read"
-    skip: true
-
-  - name: "/better-sqlite3/write"
-    api: "/better-sqlite3/write"
-    method: "POST"
-    skip: true
-
-  - name: "/better-sqlite3/rw"
-    api: "/better-sqlite3/rw"
-    method: "POST"
-    skip: true
-
-  - name: "/better-sqlite3/read/indexed"
-    api: "/better-sqlite3/read/indexed"
-    skip: true
-
-  - name: "/better-sqlite3/read/noindex"
-    api: "/better-sqlite3/read/noindex"
-    skip: true
-
-  - name: "/better-sqlite3/count(*)"
-    api: "/better-sqlite3/count"
-    method: "POST"
-    skip: true
-
-  - name: "/sqlite3/read"
-    api: "/sqlite3/read"
+  - name: "/sqlite3/read/complicated"
+    api: "/sqlite3/read/complicated"
     format: "text"
 
   - name: "/sqlite3/write"
@@ -96,8 +69,11 @@ apis:
     api: "/sqlite3/count"
     method: "POST"
 
-  - name: "/postgres/read"
-    api: "/postgres/read"
+  - name: "/sqlite3/read/pages"
+    api: "/sqlite3/read/pages"
+
+  - name: "/postgres/read/complicated"
+    api: "/postgres/read/complicated"
 
   - name: "/postgres/write"
     api: "/postgres/write"
@@ -116,3 +92,6 @@ apis:
   - name: "/postgres/count(*)"
     api: "/postgres/count"
     method: "POST"
+
+  - name: "/postgres/read/pages"
+    api: "/postgres/read/pages"

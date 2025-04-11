@@ -8,7 +8,7 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const DB_ROWS = 100 * 10000; // 示例中总行数
+const DB_ROWS = 30 * 10000; // 示例中总行数
 
 // 定义两个不同的数据库文件路径
 const SQLITE_BETTER_PATH = path.join(__dirname, "data/better_sqlite.db");
@@ -232,91 +232,8 @@ async function initPostgres() {
    API 路由定义
    ============================= */
 
-/* --- better‑sqlite3 接口 --- */
-app.get("/better-sqlite3/read", (req, res) => {
-  const rows = sqliteBetter
-    .prepare(
-      `
-    SELECT * FROM users
-    WHERE age BETWEEN 25 AND 35
-      AND gender = 'male'
-      AND is_active = 1
-      AND created_at >= datetime('now', '-1 year')
-    ORDER BY last_login DESC
-    LIMIT 10
-  `
-    )
-    .all();
-  res.json(rows);
-});
-
-app.post("/better-sqlite3/write", (req, res) => {
-  const row = generateMockUser(Date.now());
-  try {
-    betterSqliteInsert.run(...row);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/better-sqlite3/rw", (req, res) => {
-  try {
-    const row = generateMockUser(Date.now());
-    betterSqliteInsert.run(...row);
-    const afterStats = sqliteBetter
-      .prepare("SELECT * FROM users where username = ?")
-      .get(row[0]);
-    res.json(afterStats);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/better-sqlite3/count", (req, res) => {
-  try {
-    const before = sqliteBetter
-      .prepare("SELECT count(*) as c FROM users")
-      .get();
-
-    res.json({
-      before: before.c,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/better-sqlite3/read/indexed", (req, res) => {
-  const rows = sqliteBetter
-    .prepare(
-      `
-    SELECT * FROM users
-    WHERE age = 30
-    ORDER BY login_count DESC
-    LIMIT 10
-  `
-    )
-    .all();
-  res.json(rows);
-});
-
-app.get("/better-sqlite3/read/noindex", (req, res) => {
-  const rows = sqliteBetter
-    .prepare(
-      `
-    SELECT * FROM users
-    WHERE preferences LIKE '%dark%'
-    ORDER BY username DESC
-    LIMIT 10
-  `
-    )
-    .all();
-  res.json(rows);
-});
-
 /* --- sqlite3 接口 --- */
-app.get("/sqlite3/read", (req, res) => {
+app.get("/sqlite3/read/complicated", (req, res) => {
   const query = `
     SELECT * FROM users
     WHERE age BETWEEN 25 AND 35
@@ -389,8 +306,31 @@ app.get("/sqlite3/read/noindex", (req, res) => {
   });
 });
 
+app.get("/sqlite3/read/pages", (req, res) => {
+  // 从查询字符串获取页码和每页大小，默认分别为 1 和 10
+  const page = parseInt(req.query.page, 10) || 1;
+  const pageSize = parseInt(req.query.pageSize, 10) || 10;
+  // 计算偏移量：第一页 offset=0，第二页 offset=pageSize，依此类推
+  const offset = (page - 1) * pageSize;
+
+  // 不再有 WHERE 条件，直接按照 created_at 倒序排列（最新的排在最前面）
+  const query = `
+    SELECT *
+    FROM users
+    ORDER BY created_at DESC
+    LIMIT ${pageSize} OFFSET ${offset}
+  `;
+  sqlite3db.all(query, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.json(rows);
+    }
+  });
+});
+
 /* --- PostgreSQL 接口 --- */
-app.get("/postgres/read", async (req, res) => {
+app.get("/postgres/read/complicated", async (req, res) => {
   try {
     const result = await pgPool.query(`
       SELECT * FROM users
@@ -478,6 +418,29 @@ app.get("/postgres/read/noindex", async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/postgres/read/pages", async (req, res) => {
+  try {
+    // 从查询参数获取页码和每页记录数，默认分别为 1 和 10
+    const page = parseInt(req.query.page, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize, 10) || 10;
+    // 计算偏移量：第一页 offset=0，第二页 offset=pageSize，以此类推
+    const offset = (page - 1) * pageSize;
+
+    const sql = `
+      SELECT *
+      FROM users
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+    const params = [pageSize, offset];
+    const result = await pgPool.query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });

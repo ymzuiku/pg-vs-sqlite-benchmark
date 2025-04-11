@@ -1,0 +1,468 @@
+benchmark:
+  - concurrency: 200
+    count: 247
+    success: 247
+    rps: 25
+    min: 194
+    t50: 7821
+    t90: 7832
+    t99: 7855
+    max: 8847
+    time: "9.76"
+    name: /sqlite3/read/complicated
+  - concurrency: 200
+    count: 4305
+    success: 4305
+    rps: 984
+    min: 41
+    t50: 168
+    t90: 195
+    t99: 2097
+    max: 3692
+    time: "4.37"
+    name: /sqlite3/write
+  - concurrency: 200
+    count: 3855
+    success: 3855
+    rps: 881
+    min: 96
+    t50: 222
+    t90: 274
+    t99: 284
+    max: 848
+    time: "4.38"
+    name: /sqlite3/rw
+  - concurrency: 200
+    count: 835
+    success: 835
+    rps: 167
+    min: 17
+    t50: 1504
+    t90: 1541
+    t99: 1746
+    max: 2618
+    time: "4.99"
+    name: /sqlite3/read/indexed
+  - concurrency: 200
+    count: 255
+    success: 242
+    rps: 14
+    min: 81
+    t50: 14428
+    t90: 14437
+    t99: 14440
+    max: 14441
+    time: "17.42"
+    name: /sqlite3/read/noindex
+  - concurrency: 200
+    count: 4817
+    success: 4817
+    rps: 1083
+    min: 11
+    t50: 169
+    t90: 189
+    t99: 1101
+    max: 2915
+    time: "4.45"
+    name: /sqlite3/count(*)
+  - concurrency: 200
+    count: 14892
+    success: 14892
+    rps: 3439
+    min: 16
+    t50: 56
+    t90: 69
+    t99: 82
+    max: 105
+    time: "4.33"
+    name: /sqlite3/read/pages
+  - concurrency: 200
+    count: 5021
+    success: 5021
+    rps: 1116
+    min: 1
+    t50: 225
+    t90: 282
+    t99: 335
+    max: 420
+    time: "4.50"
+    name: /postgres/read/complicated
+  - concurrency: 200
+    count: 23772
+    success: 23772
+    rps: 5519
+    min: 17
+    t50: 35
+    t90: 42
+    t99: 55
+    max: 287
+    time: "4.31"
+    name: /postgres/write
+  - concurrency: 200
+    count: 17402
+    success: 17402
+    rps: 4029
+    min: 22
+    t50: 48
+    t90: 54
+    t99: 79
+    max: 149
+    time: "4.32"
+    name: /postgres/rw
+  - concurrency: 200
+    count: 12866
+    success: 12866
+    rps: 2966
+    min: 16
+    t50: 66
+    t90: 83
+    t99: 111
+    max: 152
+    time: "4.34"
+    name: /postgres/read/indexed
+  - concurrency: 200
+    count: 690
+    success: 690
+    rps: 119
+    min: 152
+    t50: 1636
+    t90: 1850
+    t99: 1961
+    max: 2020
+    time: "5.80"
+    name: /postgres/read/noindex
+  - concurrency: 200
+    count: 1916
+    success: 1916
+    rps: 407
+    min: 58
+    t50: 483
+    t90: 557
+    t99: 620
+    max: 682
+    time: "4.71"
+    name: /postgres/count(*)
+  - concurrency: 200
+    count: 14899
+    success: 14899
+    rps: 3435
+    min: 6
+    t50: 58
+    t90: 62
+    t99: 65
+    max: 136
+    time: "4.34"
+    name: /postgres/read/pages
+  - concurrency: 400
+    count: 431
+    success: 409
+    rps: 22
+    min: 59
+    t50: 17815
+    t90: 17822
+    t99: 18062
+    max: 18063
+    time: "18.30"
+    name: /sqlite3/read/complicated
+  - concurrency: 400
+    count: 4633
+    success: 4633
+    rps: 1000
+    min: 47
+    t50: 223
+    t90: 402
+    t99: 4082
+    max: 4105
+    time: "4.63"
+    name: /sqlite3/write
+  - concurrency: 400
+    count: 4207
+    success: 4207
+    rps: 912
+    min: 171
+    t50: 350
+    t90: 385
+    t99: 4316
+    max: 4586
+    time: "4.61"
+    name: /sqlite3/rw
+  - concurrency: 400
+    count: 819
+    success: 819
+    rps: 93
+    min: 30
+    t50: 3596
+    t90: 4350
+    t99: 5205
+    max: 5216
+    time: "8.77"
+    name: /sqlite3/read/indexed
+  - concurrency: 400
+    count: 403
+    success: 402
+    rps: 10
+    min: 104
+    t50: 38186
+    t90: 38195
+    t99: 38202
+    max: 38337
+    time: "38.44"
+    name: /sqlite3/read/noindex
+  - concurrency: 400
+    count: 3888
+    success: 3888
+    rps: 842
+    min: 46
+    t50: 355
+    t90: 380
+    t99: 4282
+    max: 4305
+    time: "4.62"
+    name: /sqlite3/count(*)
+  - concurrency: 400
+    count: 15320
+    success: 15320
+    rps: 3486
+    min: 7
+    t50: 112
+    t90: 130
+    t99: 146
+    max: 177
+    time: "4.39"
+    name: /sqlite3/read/pages
+  - concurrency: 400
+    count: 3459
+    success: 3459
+    rps: 713
+    min: 96
+    t50: 542
+    t90: 615
+    t99: 675
+    max: 788
+    time: "4.85"
+    name: /postgres/read/complicated
+  - concurrency: 400
+    count: 29956
+    success: 29956
+    rps: 6872
+    min: 1
+    t50: 74
+    t90: 86
+    t99: 104
+    max: 205
+    time: "4.36"
+    name: /postgres/write
+  - concurrency: 400
+    count: 15228
+    success: 15228
+    rps: 3492
+    min: 41
+    t50: 113
+    t90: 125
+    t99: 138
+    max: 250
+    time: "4.36"
+    name: /postgres/rw
+  - concurrency: 400
+    count: 11721
+    success: 11721
+    rps: 2654
+    min: 15
+    t50: 148
+    t90: 168
+    t99: 189
+    max: 252
+    time: "4.42"
+    name: /postgres/read/indexed
+  - concurrency: 400
+    count: 1129
+    success: 671
+    rps: 103
+    min: 149
+    t50: 2014
+    t90: 2523
+    t99: 2693
+    max: 2802
+    time: "6.49"
+    name: /postgres/read/noindex
+  - concurrency: 400
+    count: 1524
+    success: 1524
+    rps: 270
+    min: 100
+    t50: 1456
+    t90: 1555
+    t99: 1624
+    max: 1674
+    time: "5.65"
+    name: /postgres/count(*)
+  - concurrency: 400
+    count: 13622
+    success: 13622
+    rps: 3104
+    min: 9
+    t50: 122
+    t90: 137
+    t99: 277
+    max: 355
+    time: "4.39"
+    name: /postgres/read/pages
+  - concurrency: 600
+    count: 629
+    success: 611
+    rps: 15
+    min: 87
+    t50: 40834
+    t90: 40918
+    t99: 40932
+    max: 40956
+    time: "41.78"
+    name: /sqlite3/read/complicated
+  - concurrency: 600
+    count: 4816
+    success: 4816
+    rps: 1001
+    min: 103
+    t50: 258
+    t90: 652
+    t99: 4098
+    max: 4134
+    time: "4.81"
+    name: /sqlite3/write
+  - concurrency: 600
+    count: 4185
+    success: 4185
+    rps: 882
+    min: 136
+    t50: 405
+    t90: 429
+    t99: 4718
+    max: 4734
+    time: "4.75"
+    name: /sqlite3/rw
+  - concurrency: 600
+    count: 1245
+    success: 1245
+    rps: 163
+    min: 35
+    t50: 3563
+    t90: 3627
+    t99: 4059
+    max: 5866
+    time: "7.64"
+    name: /sqlite3/read/indexed
+  - concurrency: 600
+    count: 608
+    success: 607
+    rps: 16
+    min: 74
+    t50: 37698
+    t90: 37708
+    t99: 37716
+    max: 38047
+    time: "38.19"
+    name: /sqlite3/read/noindex
+  - concurrency: 600
+    count: 8545
+    success: 8545
+    rps: 1880
+    min: 1
+    t50: 311
+    t90: 341
+    t99: 4047
+    max: 4083
+    time: "4.54"
+    name: /sqlite3/count(*)
+  - concurrency: 600
+    count: 15644
+    success: 15644
+    rps: 3523
+    min: 14
+    t50: 164
+    t90: 201
+    t99: 220
+    max: 419
+    time: "4.44"
+    name: /sqlite3/read/pages
+  - concurrency: 600
+    count: 3270
+    success: 3270
+    rps: 636
+    min: 84
+    t50: 911
+    t90: 1008
+    t99: 1076
+    max: 1150
+    time: "5.14"
+    name: /postgres/read/complicated
+  - concurrency: 600
+    count: 22418
+    success: 22418
+    rps: 5126
+    min: 37
+    t50: 112
+    t90: 138
+    t99: 163
+    max: 459
+    time: "4.37"
+    name: /postgres/write
+  - concurrency: 600
+    count: 16422
+    success: 16422
+    rps: 3720
+    min: 28
+    t50: 159
+    t90: 173
+    t99: 187
+    max: 441
+    time: "4.41"
+    name: /postgres/rw
+  - concurrency: 600
+    count: 11244
+    success: 11244
+    rps: 2488
+    min: 24
+    t50: 237
+    t90: 261
+    t99: 284
+    max: 316
+    time: "4.52"
+    name: /postgres/read/indexed
+  - concurrency: 600
+    count: 1854
+    success: 720
+    rps: 110
+    min: 202
+    t50: 2005
+    t90: 2391
+    t99: 2690
+    max: 2859
+    time: "6.52"
+    name: /postgres/read/noindex
+  - concurrency: 600
+    count: 2073
+    success: 2073
+    rps: 349
+    min: 79
+    t50: 1682
+    t90: 1780
+    t99: 1847
+    max: 1910
+    time: "5.93"
+    name: /postgres/count(*)
+  - concurrency: 600
+    count: 12998
+    success: 12998
+    rps: 2878
+    min: 10
+    t50: 202
+    t90: 213
+    t99: 353
+    max: 370
+    time: "4.52"
+    name: /postgres/read/pages
+serverVersion: unknown
+platform: linux
+cpuCores: 8
+memoryGB: "16"
+totalTime: 342.772s
