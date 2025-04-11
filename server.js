@@ -8,7 +8,7 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const DB_ROWS = 30 * 10000; // 示例中总行数
+const DB_ROWS = 100 * 10000; // 示例中总行数
 
 // 定义两个不同的数据库文件路径
 const SQLITE_BETTER_PATH = path.join(__dirname, "data/better_sqlite.db");
@@ -262,24 +262,27 @@ app.post("/better-sqlite3/write", (req, res) => {
 
 app.post("/better-sqlite3/rw", (req, res) => {
   try {
-    const before = sqliteBetter
-      .prepare("SELECT count(*) as c FROM users")
-      .get();
     const row = generateMockUser(Date.now());
     betterSqliteInsert.run(...row);
     const afterStats = sqliteBetter
-      .prepare(
-        "SELECT count(*) as c, MAX(id) as max_id, MIN(age) as min_age FROM users"
-      )
+      .prepare("SELECT * FROM users where username = ?")
+      .get(row[0]);
+    res.json(afterStats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/better-sqlite3/count", (req, res) => {
+  try {
+    const before = sqliteBetter
+      .prepare("SELECT count(*) as c FROM users")
       .get();
+
     res.json({
       before: before.c,
-      after: afterStats.c,
-      max_id: afterStats.max_id,
-      min_age: afterStats.min_age,
     });
   } catch (err) {
-    console.log("==debug==", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -338,25 +341,24 @@ app.post("/sqlite3/write", (req, res) => {
 });
 
 app.post("/sqlite3/rw", (req, res) => {
+  const row = generateMockUser(Date.now());
+  sqlite3db.run(sqliteInsertSQL, row, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    const query = `
+      SELECT * FROM users where username = ?
+    `;
+    sqlite3db.get(query, [row[0]], (err, afterRow) => {
+      if (err) res.status(500).json({ error: err.message });
+      else res.json(afterRow);
+    });
+  });
+});
+
+app.post("/sqlite3/count", (req, res) => {
   sqlite3db.get("SELECT count(*) as c FROM users", (err, beforeRow) => {
     if (err) return res.status(500).json({ error: err.message });
-    const row = generateMockUser(Date.now());
-    sqlite3db.run(sqliteInsertSQL, row, function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      const query = `
-        SELECT count(*) as c, MAX(id) as max_id, MIN(age) as min_age FROM users
-      `;
-      sqlite3db.get(query, (err, afterRow) => {
-        if (err) res.status(500).json({ error: err.message });
-        else {
-          res.json({
-            before: beforeRow.c,
-            after: afterRow.c,
-            max_id: afterRow.max_id,
-            min_age: afterRow.min_age,
-          });
-        }
-      });
+    res.json({
+      before: beforeRow.c,
     });
   });
 });
@@ -425,7 +427,6 @@ app.post("/postgres/write", async (req, res) => {
 
 app.post("/postgres/rw", async (req, res) => {
   try {
-    const before = await pgPool.query("SELECT count(*) FROM users");
     const row = generateMockUser(Date.now());
     const values = row.map((_, i) => `$${i + 1}`).join(", ");
     const sql = `
@@ -437,17 +438,20 @@ app.post("/postgres/rw", async (req, res) => {
     `;
     await pgPool.query(sql, row);
     const after = await pgPool.query(
-      "SELECT count(*) as c, MAX(id) as max_id, MIN(age) as min_age FROM users"
+      "SELECT * FROM users where username = $1",
+      [row[0]]
     );
-    res.json({
-      before: before.rows[0].count,
-      after: after.rows[0].c,
-      max_id: after.rows[0].max_id,
-      min_age: after.rows[0].min_age,
-    });
+    res.json(after.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post("/postgres/count", async (req, res) => {
+  const before = await pgPool.query("SELECT count(*) FROM users");
+  res.json({
+    before: before.rows[0].count,
+  });
 });
 
 app.get("/postgres/read/indexed", async (req, res) => {

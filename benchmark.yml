@@ -49,20 +49,30 @@ apiReplace:
 apis:
   - name: "/better-sqlite3/read"
     api: "/better-sqlite3/read"
+    skip: true
 
   - name: "/better-sqlite3/write"
     api: "/better-sqlite3/write"
     method: "POST"
+    skip: true
 
   - name: "/better-sqlite3/rw"
     api: "/better-sqlite3/rw"
     method: "POST"
+    skip: true
 
   - name: "/better-sqlite3/read/indexed"
     api: "/better-sqlite3/read/indexed"
+    skip: true
 
   - name: "/better-sqlite3/read/noindex"
     api: "/better-sqlite3/read/noindex"
+    skip: true
+
+  - name: "/better-sqlite3/count(*)"
+    api: "/better-sqlite3/count"
+    method: "POST"
+    skip: true
 
   - name: "/sqlite3/read"
     api: "/sqlite3/read"
@@ -82,6 +92,10 @@ apis:
   - name: "/sqlite3/read/noindex"
     api: "/sqlite3/read/noindex"
 
+  - name: "/sqlite3/count(*)"
+    api: "/sqlite3/count"
+    method: "POST"
+
   - name: "/postgres/read"
     api: "/postgres/read"
 
@@ -98,3 +112,7 @@ apis:
 
   - name: "/postgres/read/noindex"
     api: "/postgres/read/noindex"
+
+  - name: "/postgres/count(*)"
+    api: "/postgres/count"
+    method: "POST"
