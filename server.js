@@ -1,5 +1,4 @@
 const express = require("express");
-const betterSqlite3 = require("better-sqlite3");
 const sqlite3 = require("sqlite3").verbose();
 const { Pool } = require("pg");
 const path = require("path");
@@ -8,11 +7,7 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const DB_ROWS = 30 * 10000; // 示例中总行数
-
-// 定义两个不同的数据库文件路径
-const SQLITE_BETTER_PATH = path.join(__dirname, "data/better_sqlite.db");
-const SQLITE3_PATH = path.join(__dirname, "data/sqlite3.db");
+const DB_ROWS = 30 * 10000; // 总行数示例
 
 // 确保 data 目录存在
 if (!fs.existsSync("data")) fs.mkdirSync("data");
@@ -73,60 +68,33 @@ const indexStatements = [
   "CREATE INDEX idx_users_score ON users(score);",
 ];
 
-// 生成不包含 id 的列名（保证顺序一致）以及插入语句
+// 生成列名和插入占位符
 const colNames = columnDefs.slice(1).map((def) => def.split(" ")[0]);
-const sqliteInsertSQL = `INSERT INTO users (${colNames.join(
-  ", "
-)}) VALUES (${Array(colNames.length).fill("?").join(", ")})`;
+const sqliteInsertSQL = `INSERT INTO users (${colNames.join(", ")}) VALUES (${Array(colNames.length).fill("?").join(", ")})`;
 
-/* =============================
-   使用 better‑sqlite3 的部分（同步）
-   ============================= */
-
-const sqliteBetter = betterSqlite3(SQLITE_BETTER_PATH);
-sqliteBetter.pragma("journal_mode = WAL");
-
-// 重建表并创建索引
-sqliteBetter.exec("DROP TABLE IF EXISTS users;");
-sqliteBetter.exec(`CREATE TABLE users (${columnDefs.join(", ")});`);
-indexStatements.forEach((stmt) => sqliteBetter.exec(stmt));
-
-// 预编译插入语句和批量插入事务
-const betterSqliteInsert = sqliteBetter.prepare(sqliteInsertSQL);
-const insertMany = sqliteBetter.transaction((rows) => {
-  for (const row of rows) betterSqliteInsert.run(...row);
-});
-
-console.log(`📅 [better‑sqlite3] Inserting ${DB_ROWS} rows...`);
+// 生成所有用户数据
 const users = Array.from({ length: DB_ROWS }, (_, i) => generateMockUser(i));
-insertMany(users);
-const sqliteBetterCount = sqliteBetter
-  .prepare("SELECT count(*) as c FROM users")
-  .get().c;
-console.log(`✅ [better‑sqlite3] Database has ${sqliteBetterCount} rows.`);
 
 /* =============================
-   使用 sqlite3 的部分（异步回调），独立数据库
+   sqlite3 部分（异步回调）
    ============================= */
-
+const SQLITE3_PATH = path.join(__dirname, "data/sqlite3.db");
 const sqlite3db = new sqlite3.Database(SQLITE3_PATH, (err) => {
   if (err) {
     console.error("Error opening sqlite3 DB:", err.message);
   }
 });
-// 配置 WAL 模式（每个连接各自设置）
+// 配置 WAL 模式
 sqlite3db.run("PRAGMA journal_mode = WAL");
 
 // 初始化 sqlite3 数据库结构：删除旧表、创建新表、添加索引
 sqlite3db.serialize(() => {
   sqlite3db.run("DROP TABLE IF EXISTS users");
   sqlite3db.run(`CREATE TABLE users (${columnDefs.join(", ")});`);
-  indexStatements.forEach((stmt) => {
-    sqlite3db.run(stmt);
-  });
+  indexStatements.forEach((stmt) => sqlite3db.run(stmt));
 });
 
-// 批量写入数据到 sqlite3 数据库，使用事务方式（回调方式）
+// 批量写入数据到 sqlite3，使用事务
 sqlite3db.serialize(() => {
   sqlite3db.run("BEGIN TRANSACTION");
   const stmt = sqlite3db.prepare(sqliteInsertSQL);
@@ -134,17 +102,17 @@ sqlite3db.serialize(() => {
     stmt.run(users[i]);
   }
   stmt.finalize((err) => {
-    if (err) {
-      console.error("Error finalizing sqlite3 statement:", err.message);
-    }
+    if (err) console.error("Error finalizing sqlite3 statement:", err.message);
     sqlite3db.run("COMMIT", (err) => {
-      if (err) {
-        console.error("Error committing sqlite3 transaction:", err.message);
-      } else {
+      if (err) console.error("Error committing sqlite3 transaction:", err.message);
+      else {
         sqlite3db.get("SELECT count(*) as c FROM users", (err, row) => {
-          if (err)
-            console.error("Error selecting count from sqlite3:", err.message);
+          if (err) console.error("Error selecting count from sqlite3:", err.message);
           else console.log(`✅ [sqlite3] Database has ${row.c} rows.`);
+        });
+        sqlite3db.exec("ANALYZE;", (err) => {
+          if (err) console.error("Error analyzing sqlite3:", err.message);
+          else console.log("✅ [sqlite3] Analyzed.");
         });
       }
     });
@@ -154,14 +122,13 @@ sqlite3db.serialize(() => {
 /* =============================
    PostgreSQL 部分（使用连接池）
    ============================= */
-
 const pgPool = new Pool({
   user: "postgres",
   host: "localhost",
   database: "testdb",
   password: "postgres",
   port: 5432,
-  max: 50, // 最大连接数，根据实际情况调整
+  max: 50,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
@@ -185,21 +152,19 @@ async function initPostgres() {
       last_login TIMESTAMP,
       settings TEXT,
       preferences TEXT,
-      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(
-        ",\n      "
-      )}
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(",\n      ")}
     );
   `);
   for (const stmt of indexStatements) {
     await pgPool.query(stmt);
   }
 
-  const sampleRow = generateMockUser(0);
+  console.log(`📅 [PostgreSQL] Inserting ${DB_ROWS} rows...`);
+  const sampleRow = users[0];
   const FIELDS_PER_ROW = sampleRow.length;
   const MAX_PARAMETERS = 60000;
   const batchSize = Math.floor(MAX_PARAMETERS / FIELDS_PER_ROW);
 
-  console.log(`📅 [PostgreSQL] Inserting ${DB_ROWS} rows...`);
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
     const flat = batch.flat();
@@ -207,11 +172,7 @@ async function initPostgres() {
     const placeholders = batch
       .map((_, rowIdx) => {
         const offset = rowIdx * FIELDS_PER_ROW;
-        const rowPlaceholders = Array.from(
-          { length: FIELDS_PER_ROW },
-          (_, colIdx) => `$${offset + colIdx + 1}`
-        );
-        return `(${rowPlaceholders.join(", ")})`;
+        return `(${Array.from({ length: FIELDS_PER_ROW }, (_, colIdx) => `$${offset + colIdx + 1}`).join(", ")})`;
       })
       .join(", ");
 
@@ -232,7 +193,7 @@ async function initPostgres() {
    API 路由定义
    ============================= */
 
-/* --- sqlite3 接口 --- */
+// sqlite3 接口
 app.get("/sqlite3/read/complicated", (req, res) => {
   const query = `
     SELECT * FROM users
@@ -261,10 +222,7 @@ app.post("/sqlite3/rw", (req, res) => {
   const row = generateMockUser(Date.now());
   sqlite3db.run(sqliteInsertSQL, row, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    const query = `
-      SELECT * FROM users where username = ?
-    `;
-    sqlite3db.get(query, [row[0]], (err, afterRow) => {
+    sqlite3db.get("SELECT * FROM users where username = ?", [row[0]], (err, afterRow) => {
       if (err) res.status(500).json({ error: err.message });
       else res.json(afterRow);
     });
@@ -274,9 +232,7 @@ app.post("/sqlite3/rw", (req, res) => {
 app.post("/sqlite3/count", (req, res) => {
   sqlite3db.get("SELECT count(*) as c FROM users", (err, beforeRow) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({
-      before: beforeRow.c,
-    });
+    res.json({ before: beforeRow.c });
   });
 });
 
@@ -307,29 +263,18 @@ app.get("/sqlite3/read/noindex", (req, res) => {
 });
 
 app.get("/sqlite3/read/pages", (req, res) => {
-  // 从查询字符串获取页码和每页大小，默认分别为 1 和 10
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
-  // 计算偏移量：第一页 offset=0，第二页 offset=pageSize，依此类推
   const offset = (page - 1) * pageSize;
 
-  // 不再有 WHERE 条件，直接按照 created_at 倒序排列（最新的排在最前面）
-  const query = `
-    SELECT *
-    FROM users
-    ORDER BY created_at DESC
-    LIMIT ${pageSize} OFFSET ${offset}
-  `;
+  const query = `SELECT * FROM users ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
   sqlite3db.all(query, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
+    if (err) res.status(500).json({ error: err.message });
+    else res.json(rows);
   });
 });
 
-/* --- PostgreSQL 接口 --- */
+// PostgreSQL 接口
 app.get("/postgres/read/complicated", async (req, res) => {
   try {
     const result = await pgPool.query(`
@@ -351,13 +296,11 @@ app.post("/postgres/write", async (req, res) => {
   try {
     const row = generateMockUser(Date.now());
     const values = row.map((_, i) => `$${i + 1}`).join(", ");
-    const sql = `
-      INSERT INTO users (
-        username, email, age, gender, is_active, login_count, score, location,
-        status, created_at, last_login, settings, preferences,
-        ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
-      ) VALUES (${values})
-    `;
+    const sql = `INSERT INTO users (
+      username, email, age, gender, is_active, login_count, score, location,
+      status, created_at, last_login, settings, preferences,
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
+    ) VALUES (${values})`;
     await pgPool.query(sql, row);
     res.json({ success: true });
   } catch (err) {
@@ -369,18 +312,13 @@ app.post("/postgres/rw", async (req, res) => {
   try {
     const row = generateMockUser(Date.now());
     const values = row.map((_, i) => `$${i + 1}`).join(", ");
-    const sql = `
-      INSERT INTO users (
-        username, email, age, gender, is_active, login_count, score, location,
-        status, created_at, last_login, settings, preferences,
-        ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
-      ) VALUES (${values})
-    `;
+    const sql = `INSERT INTO users (
+      username, email, age, gender, is_active, login_count, score, location,
+      status, created_at, last_login, settings, preferences,
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
+    ) VALUES (${values})`;
     await pgPool.query(sql, row);
-    const after = await pgPool.query(
-      "SELECT * FROM users where username = $1",
-      [row[0]]
-    );
+    const after = await pgPool.query("SELECT * FROM users where username = $1", [row[0]]);
     res.json(after.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -389,9 +327,7 @@ app.post("/postgres/rw", async (req, res) => {
 
 app.post("/postgres/count", async (req, res) => {
   const before = await pgPool.query("SELECT count(*) FROM users");
-  res.json({
-    before: before.rows[0].count,
-  });
+  res.json({ before: before.rows[0].count });
 });
 
 app.get("/postgres/read/indexed", async (req, res) => {
@@ -424,20 +360,12 @@ app.get("/postgres/read/noindex", async (req, res) => {
 
 app.get("/postgres/read/pages", async (req, res) => {
   try {
-    // 从查询参数获取页码和每页记录数，默认分别为 1 和 10
     const page = parseInt(req.query.page, 10) || 1;
     const pageSize = parseInt(req.query.pageSize, 10) || 10;
-    // 计算偏移量：第一页 offset=0，第二页 offset=pageSize，以此类推
     const offset = (page - 1) * pageSize;
 
-    const sql = `
-      SELECT *
-      FROM users
-      ORDER BY created_at DESC
-      LIMIT $1 OFFSET $2
-    `;
-    const params = [pageSize, offset];
-    const result = await pgPool.query(sql, params);
+    const sql = `SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
+    const result = await pgPool.query(sql, [pageSize, offset]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);

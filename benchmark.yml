@@ -11,7 +11,7 @@ concurrency: 600
 ramp: 200
 
 # timelimit is the total duration of the benchmark in seconds
-timelimit: 180
+timelimit: 30
 
 # aiAnalysis indicates whether to analyze the benchmark results using AI
 aiAnalysis:
