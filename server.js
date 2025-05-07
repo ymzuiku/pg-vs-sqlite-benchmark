@@ -37,6 +37,25 @@ function generateMockUser(index) {
   ];
 }
 
+/**
+ * 生成模拟订单数据
+ */
+function generateMockOrder(index) {
+  const safeIndex = Number(index) % 10000000;
+  const uniqueSuffix = `${safeIndex}_${Date.now()}_${Math.random()}`;
+
+  return [
+    `order_${uniqueSuffix}`,
+    index % 100, // 将 user_id 的范围缩小到 0-99，这样每个用户会有 3000 个订单 (300000/100 = 3000)
+    ["pending", "completed", "cancelled"][index % 3],
+    (index % 1000) + Math.random() * 100,
+    new Date(Date.now() - (safeIndex % 365) * 86400000).toISOString(),
+    new Date(Date.now() - (safeIndex % 30) * 86400000).toISOString(),
+    JSON.stringify({ payment: "credit_card" }),
+    ...Array.from({ length: 16 }, (_, i) => `field${i + 1}_${index}`),
+  ];
+}
+
 const columnDefs = [
   "id INTEGER PRIMARY KEY AUTOINCREMENT",
   "username TEXT NOT NULL",
@@ -70,10 +89,15 @@ const indexStatements = [
 
 // 生成列名和插入占位符
 const colNames = columnDefs.slice(1).map((def) => def.split(" ")[0]);
-const sqliteInsertSQL = `INSERT INTO users (${colNames.join(", ")}) VALUES (${Array(colNames.length).fill("?").join(", ")})`;
+const sqliteInsertSQL = `INSERT INTO users (${colNames.join(
+  ", "
+)}) VALUES (${Array(colNames.length).fill("?").join(", ")})`;
 
 // 生成所有用户数据
 const users = Array.from({ length: DB_ROWS }, (_, i) => generateMockUser(i));
+
+// 生成所有订单数据
+const orders = Array.from({ length: DB_ROWS }, (_, i) => generateMockOrder(i));
 
 /* =============================
    sqlite3 部分（异步回调）
@@ -90,32 +114,63 @@ sqlite3db.run("PRAGMA journal_mode = WAL");
 // 初始化 sqlite3 数据库结构：删除旧表、创建新表、添加索引
 sqlite3db.serialize(() => {
   sqlite3db.run("DROP TABLE IF EXISTS users");
+  sqlite3db.run("DROP TABLE IF EXISTS orders");
   sqlite3db.run(`CREATE TABLE users (${columnDefs.join(", ")});`);
+  sqlite3db.run(`
+    CREATE TABLE orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_number TEXT NOT NULL,
+      user_id INTEGER,
+      status TEXT,
+      amount REAL,
+      created_at TEXT,
+      updated_at TEXT,
+      payment_info TEXT,
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(
+        ",\n      "
+      )}
+    );
+  `);
   indexStatements.forEach((stmt) => sqlite3db.run(stmt));
+  sqlite3db.run("CREATE INDEX idx_orders_user_id ON orders(user_id);");
+  sqlite3db.run("CREATE INDEX idx_orders_status ON orders(status);");
 });
 
 // 批量写入数据到 sqlite3，使用事务
 sqlite3db.serialize(() => {
+  console.log(`📅 [SQLite3] Inserting ${DB_ROWS} rows...`);
   sqlite3db.run("BEGIN TRANSACTION");
-  const stmt = sqlite3db.prepare(sqliteInsertSQL);
+  const userStmt = sqlite3db.prepare(sqliteInsertSQL);
+  const orderStmt = sqlite3db.prepare(`
+    INSERT INTO orders (
+      order_number, user_id, status, amount, created_at, updated_at, payment_info,
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
+    ) VALUES (${Array(23).fill("?").join(", ")})
+  `);
+
   for (let i = 0; i < users.length; i++) {
-    stmt.run(users[i]);
+    userStmt.run(users[i]);
+    orderStmt.run(orders[i]);
   }
-  stmt.finalize((err) => {
-    if (err) console.error("Error finalizing sqlite3 statement:", err.message);
-    sqlite3db.run("COMMIT", (err) => {
-      if (err) console.error("Error committing sqlite3 transaction:", err.message);
-      else {
-        sqlite3db.get("SELECT count(*) as c FROM users", (err, row) => {
-          if (err) console.error("Error selecting count from sqlite3:", err.message);
-          else console.log(`✅ [sqlite3] Database has ${row.c} rows.`);
-        });
-        sqlite3db.exec("ANALYZE;", (err) => {
-          if (err) console.error("Error analyzing sqlite3:", err.message);
-          else console.log("✅ [sqlite3] Analyzed.");
-        });
-      }
-    });
+
+  userStmt.finalize();
+  orderStmt.finalize();
+
+  sqlite3db.run("COMMIT", (err) => {
+    if (err)
+      console.error("Error committing sqlite3 transaction:", err.message);
+    else {
+      sqlite3db.get("SELECT count(*) as c FROM users", (err, row) => {
+        if (err)
+          console.error("Error selecting count from sqlite3:", err.message);
+        else console.log(`✅ [sqlite3] Users table has ${row.c} rows.`);
+      });
+      sqlite3db.get("SELECT count(*) as c FROM orders", (err, row) => {
+        if (err)
+          console.error("Error selecting count from sqlite3:", err.message);
+        else console.log(`✅ [sqlite3] Orders table has ${row.c} rows.`);
+      });
+    }
   });
 });
 
@@ -134,7 +189,9 @@ const pgPool = new Pool({
 });
 
 async function initPostgres() {
-  await pgPool.query("DROP TABLE IF EXISTS users");
+  // 先删除 orders 表，再删除 users 表
+  await pgPool.query("DROP TABLE IF EXISTS orders CASCADE");
+  await pgPool.query("DROP TABLE IF EXISTS users CASCADE");
 
   await pgPool.query(`
     CREATE TABLE users (
@@ -152,12 +209,33 @@ async function initPostgres() {
       last_login TIMESTAMP,
       settings TEXT,
       preferences TEXT,
-      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(",\n      ")}
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(
+        ",\n      "
+      )}
     );
   `);
+
+  await pgPool.query(`
+    CREATE TABLE orders (
+      id SERIAL PRIMARY KEY,
+      order_number TEXT NOT NULL,
+      user_id INTEGER,
+      status TEXT,
+      amount REAL,
+      created_at TIMESTAMP,
+      updated_at TIMESTAMP,
+      payment_info TEXT,
+      ${Array.from({ length: 16 }, (_, i) => `field${i + 1} TEXT`).join(
+        ",\n      "
+      )}
+    );
+  `);
+
   for (const stmt of indexStatements) {
     await pgPool.query(stmt);
   }
+  await pgPool.query("CREATE INDEX idx_orders_user_id ON orders(user_id);");
+  await pgPool.query("CREATE INDEX idx_orders_status ON orders(status);");
 
   console.log(`📅 [PostgreSQL] Inserting ${DB_ROWS} rows...`);
   const sampleRow = users[0];
@@ -172,7 +250,10 @@ async function initPostgres() {
     const placeholders = batch
       .map((_, rowIdx) => {
         const offset = rowIdx * FIELDS_PER_ROW;
-        return `(${Array.from({ length: FIELDS_PER_ROW }, (_, colIdx) => `$${offset + colIdx + 1}`).join(", ")})`;
+        return `(${Array.from(
+          { length: FIELDS_PER_ROW },
+          (_, colIdx) => `$${offset + colIdx + 1}`
+        ).join(", ")})`;
       })
       .join(", ");
 
@@ -185,8 +266,42 @@ async function initPostgres() {
     `;
     await pgPool.query(sql, flat);
   }
+
+  // Insert orders data
+  console.log(`📅 [PostgreSQL] Inserting ${DB_ROWS} orders...`);
+  const sampleOrder = orders[0];
+  const FIELDS_PER_ORDER = sampleOrder.length;
+  const batchSizeOrders = Math.floor(MAX_PARAMETERS / FIELDS_PER_ORDER);
+
+  for (let i = 0; i < orders.length; i += batchSizeOrders) {
+    const batchOrders = orders.slice(i, i + batchSizeOrders);
+    const flatOrders = batchOrders.flat();
+
+    const placeholdersOrders = batchOrders
+      .map((_, rowIdx) => {
+        const offsetOrders = rowIdx * FIELDS_PER_ORDER;
+        return `(${Array.from(
+          { length: FIELDS_PER_ORDER },
+          (_, colIdx) => `$${offsetOrders + colIdx + 1}`
+        ).join(", ")})`;
+      })
+      .join(", ");
+
+    const sqlOrders = `
+      INSERT INTO orders (
+        order_number, user_id, status, amount, created_at, updated_at, payment_info,
+        ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
+      ) VALUES ${placeholdersOrders};
+    `;
+    await pgPool.query(sqlOrders, flatOrders);
+  }
+
   const result = await pgPool.query("SELECT count(*) FROM users");
-  console.log(`✅ [PostgreSQL] Database has ${result.rows[0].count} rows.`);
+  console.log(`✅ [PostgreSQL] Users table has ${result.rows[0].count} rows.`);
+  const orderResult = await pgPool.query("SELECT count(*) FROM orders");
+  console.log(
+    `✅ [PostgreSQL] Orders table has ${orderResult.rows[0].count} rows.`
+  );
 }
 
 /* =============================
@@ -222,10 +337,14 @@ app.post("/sqlite3/rw", (req, res) => {
   const row = generateMockUser(Date.now());
   sqlite3db.run(sqliteInsertSQL, row, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    sqlite3db.get("SELECT * FROM users where username = ?", [row[0]], (err, afterRow) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.json(afterRow);
-    });
+    sqlite3db.get(
+      "SELECT * FROM users where username = ?",
+      [row[0]],
+      (err, afterRow) => {
+        if (err) res.status(500).json({ error: err.message });
+        else res.json(afterRow);
+      }
+    );
   });
 });
 
@@ -318,7 +437,10 @@ app.post("/postgres/rw", async (req, res) => {
       ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
     ) VALUES (${values})`;
     await pgPool.query(sql, row);
-    const after = await pgPool.query("SELECT * FROM users where username = $1", [row[0]]);
+    const after = await pgPool.query(
+      "SELECT * FROM users where username = $1",
+      [row[0]]
+    );
     res.json(after.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -369,6 +491,77 @@ app.get("/postgres/read/pages", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 添加新的测试接口
+app.get("/sqlite3/read/exists/full", (req, res) => {
+  const query = `
+    SELECT u.* FROM users u
+    WHERE EXISTS (
+      SELECT 1 FROM orders o
+      WHERE o.user_id = u.id
+      AND o.status = 'completed'
+      AND o.amount > 50
+    )
+    ORDER BY u.created_at DESC
+    LIMIT 10
+  `;
+  sqlite3db.all(query, (err, rows) => {
+    if (err) res.status(500).json({ error: err.message });
+    else res.json(rows);
+  });
+});
+
+app.get("/sqlite3/read/join/full", (req, res) => {
+  const query = `
+    SELECT u.*, o.order_number, o.amount, o.status as order_status
+    FROM users u
+    LEFT JOIN orders o ON u.id = o.user_id
+    WHERE o.status = 'completed'
+    AND o.amount > 50
+    ORDER BY u.created_at DESC
+    LIMIT 10
+  `;
+  sqlite3db.all(query, (err, rows) => {
+    if (err) res.status(500).json({ error: err.message });
+    else res.json(rows);
+  });
+});
+
+app.get("/postgres/read/exists/full", async (req, res) => {
+  try {
+    const result = await pgPool.query(`
+      SELECT u.* FROM users u
+      WHERE EXISTS (
+        SELECT 1 FROM orders o
+        WHERE o.user_id = u.id
+        AND o.status = 'completed'
+        AND o.amount > 50
+      )
+      ORDER BY u.created_at DESC
+      LIMIT 10
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/postgres/read/join/full", async (req, res) => {
+  try {
+    const result = await pgPool.query(`
+      SELECT u.*, o.order_number, o.amount, o.status as order_status
+      FROM users u
+      LEFT JOIN orders o ON u.id = o.user_id
+      WHERE o.status = 'completed'
+      AND o.amount > 50
+      ORDER BY u.created_at DESC
+      LIMIT 10
+    `);
+    res.json(result.rows);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

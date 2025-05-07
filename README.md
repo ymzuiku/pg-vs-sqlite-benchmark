@@ -19,3 +19,11 @@ docker run -d \
   -p 5432:5432 \
   postgres:15
 ```
+
+## Change DB Rows
+
+Edit server.js:
+
+```
+const DB_ROWS = 30 * 10000;
+```
