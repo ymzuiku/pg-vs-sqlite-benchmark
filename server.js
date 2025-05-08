@@ -7,7 +7,7 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const DB_ROWS = 30 * 10000; // 总行数示例
+const DB_ROWS = 5 * 10000; // 总行数示例
 
 // 确保 data 目录存在
 if (!fs.existsSync("data")) fs.mkdirSync("data");
@@ -134,44 +134,6 @@ sqlite3db.serialize(() => {
   indexStatements.forEach((stmt) => sqlite3db.run(stmt));
   sqlite3db.run("CREATE INDEX idx_orders_user_id ON orders(user_id);");
   sqlite3db.run("CREATE INDEX idx_orders_status ON orders(status);");
-});
-
-// 批量写入数据到 sqlite3，使用事务
-sqlite3db.serialize(() => {
-  console.log(`📅 [SQLite3] Inserting ${DB_ROWS} rows...`);
-  sqlite3db.run("BEGIN TRANSACTION");
-  const userStmt = sqlite3db.prepare(sqliteInsertSQL);
-  const orderStmt = sqlite3db.prepare(`
-    INSERT INTO orders (
-      order_number, user_id, status, amount, created_at, updated_at, payment_info,
-      ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
-    ) VALUES (${Array(23).fill("?").join(", ")})
-  `);
-
-  for (let i = 0; i < users.length; i++) {
-    userStmt.run(users[i]);
-    orderStmt.run(orders[i]);
-  }
-
-  userStmt.finalize();
-  orderStmt.finalize();
-
-  sqlite3db.run("COMMIT", (err) => {
-    if (err)
-      console.error("Error committing sqlite3 transaction:", err.message);
-    else {
-      sqlite3db.get("SELECT count(*) as c FROM users", (err, row) => {
-        if (err)
-          console.error("Error selecting count from sqlite3:", err.message);
-        else console.log(`✅ [sqlite3] Users table has ${row.c} rows.`);
-      });
-      sqlite3db.get("SELECT count(*) as c FROM orders", (err, row) => {
-        if (err)
-          console.error("Error selecting count from sqlite3:", err.message);
-        else console.log(`✅ [sqlite3] Orders table has ${row.c} rows.`);
-      });
-    }
-  });
 });
 
 /* =============================
@@ -498,7 +460,21 @@ app.get("/postgres/read/pages", async (req, res) => {
 // 添加新的测试接口
 app.get("/sqlite3/read/exists/full", (req, res) => {
   const query = `
-    SELECT u.* FROM users u
+    SELECT 
+      u.*,
+      (SELECT o.order_number FROM orders o 
+       WHERE o.user_id = u.id 
+       AND o.status = 'completed' 
+       AND o.amount > 50 
+       ORDER BY o.amount DESC 
+       LIMIT 1) as order_number,
+      (SELECT o.amount FROM orders o 
+       WHERE o.user_id = u.id 
+       AND o.status = 'completed' 
+       AND o.amount > 50 
+       ORDER BY o.amount DESC 
+       LIMIT 1) as order_amount
+    FROM users u
     WHERE EXISTS (
       SELECT 1 FROM orders o
       WHERE o.user_id = u.id
@@ -533,7 +509,21 @@ app.get("/sqlite3/read/join/full", (req, res) => {
 app.get("/postgres/read/exists/full", async (req, res) => {
   try {
     const result = await pgPool.query(`
-      SELECT u.* FROM users u
+      SELECT 
+        u.*,
+        (SELECT o.order_number FROM orders o 
+         WHERE o.user_id = u.id 
+         AND o.status = 'completed' 
+         AND o.amount > 50 
+         ORDER BY o.amount DESC 
+         LIMIT 1) as order_number,
+        (SELECT o.amount FROM orders o 
+         WHERE o.user_id = u.id 
+         AND o.status = 'completed' 
+         AND o.amount > 50 
+         ORDER BY o.amount DESC 
+         LIMIT 1) as order_amount
+      FROM users u
       WHERE EXISTS (
         SELECT 1 FROM orders o
         WHERE o.user_id = u.id
@@ -555,10 +545,10 @@ app.get("/postgres/read/join/full", async (req, res) => {
       SELECT u.*, o.order_number, o.amount, o.status as order_status
       FROM users u
       LEFT JOIN orders o ON u.id = o.user_id
-      WHERE o.status = 'completed'
-      AND o.amount > 50
-      ORDER BY u.created_at DESC
-      LIMIT 10
+    WHERE o.status = 'completed'
+    AND o.amount > 50
+    ORDER BY u.created_at DESC
+    LIMIT 10
     `);
     res.json(result.rows);
   } catch (err) {
@@ -567,11 +557,94 @@ app.get("/postgres/read/join/full", async (req, res) => {
 });
 
 /* =============================
+   数据库初始化函数
+   ============================= */
+async function initdb() {
+  console.log("🚀 Starting database initialization...");
+
+  // SQLite3 初始化
+  const sqliteInitPromise = new Promise((resolve, reject) => {
+    console.log(`📅 [SQLite3] Inserting ${DB_ROWS} rows...`);
+    sqlite3db.serialize(() => {
+      sqlite3db.run("BEGIN TRANSACTION");
+      const userStmt = sqlite3db.prepare(sqliteInsertSQL);
+      const orderStmt = sqlite3db.prepare(`
+        INSERT INTO orders (
+          order_number, user_id, status, amount, created_at, updated_at, payment_info,
+          ${Array.from({ length: 16 }, (_, i) => `field${i + 1}`).join(", ")}
+        ) VALUES (${Array(23).fill("?").join(", ")})
+      `);
+
+      for (let i = 0; i < users.length; i++) {
+        userStmt.run(users[i]);
+        orderStmt.run(orders[i]);
+      }
+
+      userStmt.finalize();
+      orderStmt.finalize();
+
+      sqlite3db.run("COMMIT", (err) => {
+        if (err) {
+          console.error("Error committing sqlite3 transaction:", err.message);
+          reject(err);
+          return;
+        }
+        sqlite3db.get("SELECT count(*) as c FROM users", (err, row) => {
+          if (err) {
+            console.error("Error selecting count from sqlite3:", err.message);
+            reject(err);
+            return;
+          }
+          console.log(`✅ [SQLite3] Users table has ${row.c} rows.`);
+          sqlite3db.get("SELECT count(*) as c FROM orders", (err, row) => {
+            if (err) {
+              console.error("Error selecting count from sqlite3:", err.message);
+              reject(err);
+              return;
+            }
+            console.log(`✅ [SQLite3] Orders table has ${row.c} rows.`);
+            sqlite3db.exec("ANALYZE;", (err) => {
+              if (err) {
+                console.error("Error analyzing sqlite3:", err.message);
+                reject(err);
+                return;
+              }
+              console.log("✅ [SQLite3] Analyzed.");
+              resolve();
+            });
+          });
+        });
+      });
+    });
+  });
+
+  // PostgreSQL 初始化
+  const pgInitPromise = initPostgres();
+
+  try {
+    // 等待两个数据库都初始化完成
+    await Promise.all([sqliteInitPromise, pgInitPromise]);
+    console.log("✅ All databases initialized successfully!");
+    return true;
+  } catch (err) {
+    console.error("❌ Database initialization failed:", err);
+    return false;
+  }
+}
+
+/* =============================
    启动服务
    ============================= */
 const port = 3333;
-initPostgres().then(() => {
-  app.listen(port, () => {
-    console.log(`✅ Server running at http://localhost:${port}`);
-  });
+initdb().then((success) => {
+  if (success) {
+    app.listen(port, () => {
+      console.log(`✅ Server running at http://localhost:${port}`);
+    });
+  } else {
+    console.error(
+      "❌ Server startup aborted due to database initialization failure"
+    );
+    process.exit(1);
+  }
 });
